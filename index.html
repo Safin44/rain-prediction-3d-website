@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Will It Rain Tomorrow? — Rain Prediction Observatory | DS422 · Imam Hossain Safin</title>
+  <meta name="description"
+    content="DS422 ML-I lab: Weather-Based Rain Prediction on 55,996 days. Decision Tree and Random Forest reach 100% by rediscovering the exact rule in the data.">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+
+<body>
+  <!-- 3D SKY: falling rain + drifting clouds (light scene — intentionally opposite to the churn site's dark particle field) -->
+  <canvas id="sky3d" aria-hidden="true"></canvas>
+  <div class="sky-fallback" aria-hidden="true"></div>
+
+  <header class="masthead">
+    <a class="wordmark" href="#top">Rain Observatory</a>
+    <nav aria-label="Sections">
+      <a href="#station">Weather Station</a>
+      <a href="#race">Model Race</a>
+      <a href="#charts">Notebook Charts</a>
+      <a href="#tree">Decision Tree</a>
+      <a href="#fieldnotes">Field Notes</a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <!-- HERO — editorial weather-journal layout, serif headline, circular instruments -->
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">DS422 · Machine Learning I (Lab) — Evaluation 22 Nov 2026</p>
+        <h1>Will it rain<br><em>tomorrow?</em></h1>
+        <p class="lede">Five models read 55,996 days of weather. Two of them scored a perfect
+          100% — not because they learned meteorology, but because they <strong>found the exact
+            rule hidden inside the data</strong>. This observatory lets you test that rule yourself.</p>
+        <p class="byline">Imam Hossain Safin · ID 232-35-512 · Dataset: Weather-Based Rain Prediction, Kaggle
+          (jayavantwarkhade)</p>
+        <div class="hero-actions">
+          <a class="btn btn-storm" href="#station">Try the live forecast ↓</a>
+          <a class="btn btn-ghost" href="#tree">See the rule</a>
+        </div>
+      </div>
+      <div class="instruments" aria-label="Key results as instruments">
+        <div class="dial dial-main">
+          <span class="dial-num">100%</span>
+          <span class="dial-label">Test accuracy<br>Tree + Forest</span>
+        </div>
+        <div class="dial">
+          <span class="dial-num">1.000</span>
+          <span class="dial-label">ROC-AUC</span>
+        </div>
+        <div class="dial">
+          <span class="dial-num">55,996</span>
+          <span class="dial-label">Days observed</span>
+        </div>
+        <div class="dial dial-sun">
+          <span class="dial-num">18.6%</span>
+          <span class="dial-label">Days followed by rain</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- LIVE PREDICTOR — the Weather Station -->
+    <section id="station" class="card station">
+      <div class="section-head">
+        <p class="kicker">01 · Live forecast</p>
+        <h2>The Weather Station</h2>
+        <p>Move the three rule dials (and adjust the other readings if you like). The verdict is
+          <strong>served live from the actual model inside <code>random_forest_rain_model.pkl</code></strong>,
+          loaded by a local Python (FastAPI) backend at <code>http://127.0.0.1:8001</code> — the browser
+          sends all 8 readings to the backend, which scales them exactly as the notebook did and asks
+          the Random Forest to predict. The status lines under the dials are only a guide — they do
+          <strong>not</strong> decide the verdict. Start the backend
+          first (see the site README); if it is not running, the station shows a clear error instead of guessing.
+          Readings outside the dataset's range are clamped here and rejected by the backend, because the model never
+          saw such values.
+        </p>
+        <p class="health-badge" id="healthBadge" aria-live="polite">● Checking backend…</p>
+      </div>
+
+      <div class="preset-row">
+        <button type="button" class="chip chip-rain" id="presetRain">🌧 Monsoon day — should predict RAIN</button>
+        <button type="button" class="chip chip-dry" id="presetDry">☀ Clear dry day — should predict NO RAIN</button>
+        <button type="button" class="chip" id="presetEdge">⛅ Just below the line — edge case</button>
+      </div>
+
+      <div class="station-grid">
+        <div class="controls">
+          <div class="control rule-control">
+            <div class="control-top"><label for="humidity">Humidity</label><output id="humidityOut">72%</output></div>
+            <input type="range" id="humidity" min="20" max="100" step="1" value="72">
+            <p class="gate" id="gateHumidity">—</p>
+            <p class="range-hint">Dataset range: 20–100%</p>
+          </div>
+          <div class="control rule-control">
+            <div class="control-top"><label for="cloud">Cloud cover</label><output id="cloudOut">6 / 8</output></div>
+            <input type="range" id="cloud" min="0" max="8" step="1" value="6">
+            <p class="gate" id="gateCloud">—</p>
+            <p class="range-hint">Dataset range: 0–8 oktas</p>
+          </div>
+          <div class="control rule-control">
+            <div class="control-top"><label for="rainfall">Rainfall today</label><output id="rainfallOut">5.4 mm</output></div>
+            <input type="range" id="rainfall" min="0" max="50" step="0.1" value="5.4">
+            <p class="gate" id="gateRainfall">—</p>
+            <p class="range-hint">Dataset range: 0–50 mm</p>
+          </div>
+
+          <details class="more-readings">
+            <summary>Other readings (sent to the model too — all 8 features are required — though their combined
+              importance is only ≈ 1.2%)</summary>
+            <div class="mini-grid">
+              <label>MinTemp °C <input type="number" id="minTemp" value="14.2" step="0.1" min="0" max="30"><small class="range-hint">Dataset: 0–30 °C</small></label>
+              <label>MaxTemp °C <input type="number" id="maxTemp" value="24.8" step="0.1" min="15" max="45"><small class="range-hint">Dataset: 15–45 °C</small></label>
+              <label>Pressure hPa <input type="number" id="pressure" value="1015" step="0.1" min="980" max="1035"><small class="range-hint">Dataset: 980–1035 hPa</small></label>
+              <label>WindSpeed km/h <input type="number" id="windSpeed" value="18" step="1" min="0" max="60"><small class="range-hint">Dataset: 0–60 km/h</small></label>
+              <label>WindGustSpeed km/h <input type="number" id="windGust" value="32" step="1" min="0" max="80"><small class="range-hint">Dataset: 0–80 km/h</small></label>
+            </div>
+            <p class="hint">Random Forest importance: WindSpeed 0.0026 · Pressure 0.0025 · MinTemp 0.0025 ·
+              WindGustSpeed 0.0024 · MaxTemp 0.0024. All 8 readings are sent to the backend model; the three rule dials
+              above carry almost all of the weight.</p>
+          </details>
+        </div>
+
+        <div class="verdict" id="verdictBox" aria-live="polite">
+          <div class="verdict-sky" id="verdictSky">⏳</div>
+          <p class="verdict-label" id="verdictLabel">CHECKING MODEL…</p>
+          <p class="verdict-sub" id="verdictSub">Asking random_forest_rain_model.pkl via the local backend…</p>
+          <div class="rain-video-wrap" id="rainVideoWrap" hidden>
+            <video id="rainVideo" src="rain.mp4" autoplay loop muted playsinline></video>
+          </div>
+          <div class="gauge" aria-label="Rain probability">
+            <div class="gauge-top"><span>Rain probability</span><strong id="gaugeVal">—</strong></div>
+            <div class="gauge-track"><span class="gauge-fill" id="gaugeFill"></span><span class="gauge-mid"></span></div>
+            <small id="gaugeVotes"></small>
+          </div>
+          <ul class="verdict-gates">
+            <li id="vGateHumidity">Humidity gate —</li>
+            <li id="vGateCloud">Cloud gate —</li>
+            <li id="vGateRainfall">Rainfall gate —</li>
+          </ul>
+          <p class="dist-title">Distance to the learned thresholds</p>
+          <ul class="verdict-gates dist-list" id="distList"></ul>
+          <p class="verdict-note">Verdict &amp; probability above come from
+            <strong>random_forest_rain_model.pkl</strong> via the local Python backend — not from a browser rule.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODEL RACE -->
+    <section id="race" class="card">
+      <div class="section-head">
+        <p class="kicker">02 · Five models, one finish line</p>
+        <h2>The Model Race</h2>
+        <p>Same 80/20 stratified split for everyone (44,796 train / 11,200 test, random_state = 42).
+          Tree-based models can draw the sharp “AND of three thresholds” shape exactly — smooth-boundary models cannot.
+        </p>
+      </div>
+      <div class="race-list" id="raceList"><!-- rows injected by app.js from verified notebook results --></div>
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Train</th>
+            <th>Test</th>
+            <th>ROC-AUC</th>
+            <th>Rain Precision</th>
+            <th>Rain Recall</th>
+            <th>Rain F1</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="winner">
+            <td>Decision Tree 🏆</td>
+            <td>100.00%</td>
+            <td><strong>100.00%</strong></td>
+            <td>1.0000</td>
+            <td>1.00</td>
+            <td>1.00</td>
+            <td>1.00</td>
+          </tr>
+          <tr class="winner">
+            <td>Random Forest 🏆</td>
+            <td>100.00%</td>
+            <td><strong>100.00%</strong></td>
+            <td>1.0000</td>
+            <td>1.00</td>
+            <td>1.00</td>
+            <td>1.00</td>
+          </tr>
+          <tr>
+            <td>SVC</td>
+            <td>98.09%</td>
+            <td>97.66%</td>
+            <td>0.9965</td>
+            <td>0.95</td>
+            <td>0.93</td>
+            <td>0.94</td>
+          </tr>
+          <tr>
+            <td>KNN (k = 5)</td>
+            <td>97.65%</td>
+            <td>95.87%</td>
+            <td>0.9879</td>
+            <td>0.90</td>
+            <td>0.88</td>
+            <td>0.89</td>
+          </tr>
+          <tr>
+            <td>Logistic Regression</td>
+            <td>93.40%</td>
+            <td>93.11%</td>
+            <td>0.9766</td>
+            <td>0.83</td>
+            <td>0.80</td>
+            <td>0.81</td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="honest">Honest reading: a perfect score here means the target was <strong>generated by a rule</strong>,
+        and the trees
+        reverse-engineered it. Always predicting “no rain” already scores 81.4%, which is why precision, recall and
+        ROC-AUC are reported alongside accuracy.
+        SVC was trained on a 10,000-row stratified subsample (it is very slow on 44,796 rows) and tested on the full
+        test set.</p>
+      <div class="confusion">
+        <h3>Confusion matrix — Random Forest (test set, 11,200 days)</h3>
+        <div class="cm">
+          <div class="cm-cell cm-perfect"><strong>9,116</strong><span>Actual no rain → predicted no rain</span></div>
+          <div class="cm-cell cm-zero"><strong>0</strong><span>False alarms</span></div>
+          <div class="cm-cell cm-zero"><strong>0</strong><span>Missed rainy days</span></div>
+          <div class="cm-cell cm-perfect"><strong>2,084</strong><span>Actual rain → predicted rain</span></div>
+        </div>
+        <p>[[9,116, 0], [0, 2,084]] — every single test day classified correctly.</p>
+      </div>
+    </section>
+
+    <!-- NOTEBOOK CHARTS — every figure from the notebook, redrawn from data.js -->
+    <section id="charts" class="card">
+      <div class="section-head">
+        <p class="kicker">03 · Notebook charts</p>
+        <h2>Every Figure From the Notebook</h2>
+        <p>Redrawn from <code>data.js</code>, which <code>backend/build_site_data.py</code> generates by re-running the
+          notebook pipeline (same split, scaler and hyper-parameters; Random Forest = the shipped <code>.pkl</code>).
+          The script checks every confusion matrix against the notebook outputs before writing anything.</p>
+      </div>
+      <div class="chart-grid">
+        <article class="chart-card">
+          <h3>Target distribution <small>· cell 9</small></h3>
+          <div id="chartTarget"></div>
+        </article>
+        <article class="chart-card">
+          <h3>Rain rate by cloud cover <small>· EDA</small></h3>
+          <div id="chartCloud"></div>
+        </article>
+        <article class="chart-card">
+          <h3>Feature importances, all 8 <small>· cell 27</small></h3>
+          <div id="chartImportance"></div>
+        </article>
+        <article class="chart-card">
+          <h3>Train vs test accuracy <small>· cells 22–23</small></h3>
+          <div id="chartTrainTest"></div>
+        </article>
+        <article class="chart-card">
+          <h3>ROC curves <small>· cell 26</small></h3>
+          <div id="chartRoc"></div>
+        </article>
+        <article class="chart-card">
+          <h3>Correlation heatmap <small>· cell 10</small></h3>
+          <div id="chartCorr" class="heatmap-wrap"></div>
+        </article>
+      </div>
+      <h3 class="sub-h">Confusion matrices — all five models (test set, 11,200 days) <small>· cells 17–21</small></h3>
+      <div class="mcm-grid-wrap" id="chartCms"></div>
+    </section>
+
+    <!-- DECISION TREE -->
+    <section id="tree" class="card">
+      <div class="section-head">
+        <p class="kicker">04 · The evidence</p>
+        <h2>A Tree With Only Three Questions</h2>
+        <p>The unscaled decision tree grows to depth 3 with just 4 leaves. It asks three questions, and nothing else,
+          yet classifies all 11,200 test days perfectly. The thresholds below are the exact split values it learned.</p>
+      </div>
+      <div class="tree-flow" role="img"
+        aria-label="Decision tree: if humidity is at most 65.01 percent, no rain. Else if cloud cover is at most 4.5 oktas, no rain. Else if rainfall is at most 2.01 mm, no rain. Else rain tomorrow.">
+        <div class="node node-q">Humidity &gt; 65.01 %?</div>
+        <div class="branch"><span>No → <b>NO RAIN</b></span><span>Yes ↓</span></div>
+        <div class="node node-q">Cloud &gt; 4.5 oktas? <small>(i.e. 5–8)</small></div>
+        <div class="branch"><span>No → <b>NO RAIN</b></span><span>Yes ↓</span></div>
+        <div class="node node-q">Rainfall today &gt; 2.01 mm?</div>
+        <div class="branch"><span>No → <b>NO RAIN</b></span><span>Yes ↓</span></div>
+        <div class="node node-rain">🌧 RAIN TOMORROW</div>
+      </div>
+      <p class="honest">Trees ignore scaling, so the notebook re-trains this display tree on the original unscaled
+        values — the questions above are asked in real units (% · oktas · mm) and it still scores 1.0 on the test set.
+        Rounded, the same rule is <code>Humidity &gt; 65 AND Cloud &gt; 4.5 AND Rainfall &gt; 2</code>, and it matches
+        100.00% of all 55,996 rows (notebook “Verify” cell).</p>
+    </section>
+
+    <!-- FIELD NOTES -->
+    <section id="fieldnotes" class="card">
+      <div class="section-head">
+        <p class="kicker">05 · Field notes</p>
+        <h2>Dataset &amp; Honest Findings</h2>
+      </div>
+      <div class="notes-grid">
+        <article>
+          <h3>The dataset</h3>
+          <ul>
+            <li><strong>55,996 rows × 9 columns</strong> — 8 numeric features + target <code>RainTomorrow</code> (binary
+              classification).</li>
+            <li>Features: MinTemp, MaxTemp, Rainfall, Humidity, Pressure, WindSpeed, WindGustSpeed, Cloud (0–8 oktas).
+            </li>
+            <li>Target split: 45,579 dry (81.4%) vs 10,417 rainy (18.6%).</li>
+            <li>Preprocessing: StandardScaler on all features, fitted on train only. No encoding needed — everything is
+              numeric.</li>
+            <li>Source: <a href="https://www.kaggle.com/datasets/jayavantwarkhade/weather-based-rain-prediction-dataset"
+                rel="noopener">Kaggle — jayavantwarkhade</a>.</li>
+          </ul>
+        </article>
+        <article>
+          <h3>Clean — almost too clean</h3>
+          <ul>
+            <li><strong>0 missing values, 0 duplicates, 0 outliers</strong> (IQR rule). No imputation was needed — the
+              opposite of the churn dataset.</li>
+            <li><strong>Kept and reported, not deleted:</strong> MinTemp &gt; MaxTemp in 6,918 rows (12.4%);
+              WindGustSpeed &lt; WindSpeed in 21,129 rows (37.7%).</li>
+            <li>Those impossible patterns are evidence the data is <strong>synthetically generated</strong> — deleting
+              up to 38% of rows would help nothing.</li>
+          </ul>
+        </article>
+      </div>
+      <h3 class="sub-h">Feature summary <small>· notebook cell 7 (<code>df.describe()</code>)</small></h3>
+      <table class="results-table summary-table">
+        <thead>
+          <tr><th>Feature</th><th>Unit</th><th>Min</th><th>Mean</th><th>Std</th><th>Max</th><th>RF importance</th></tr>
+        </thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+      <ol class="timeline">
+        <li><span>Observe</span>55,996 days loaded &amp; checked</li>
+        <li><span>Explore</span>Distributions, correlations, rain-rate by cloud</li>
+        <li><span>Scale</span>StandardScaler, train only</li>
+        <li><span>Split</span>80/20 stratified, seed 42</li>
+        <li><span>Train</span>5 classifiers compared</li>
+        <li><span>Discover</span>Depth-3 tree reveals the rule</li>
+        <li><span>Verify</span>Rule matches 100.00% of all rows</li>
+        <li><span>Save</span>Random Forest exported as .pkl</li>
+      </ol>
+    </section>
+  </main>
+
+  <footer>
+    <p>Rain Observatory — DS422 Rain Prediction (light sky theme, editorial serif, circular instruments and a vertical
+      field-notes timeline).</p>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script src="charts.js"></script>
+  <script src="sky3d.js"></script>
+</body>
+
+</html>
