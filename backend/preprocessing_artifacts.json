@@ -1,0 +1,57 @@
+{
+  "feature_columns": [
+    "MinTemp",
+    "MaxTemp",
+    "Rainfall",
+    "Humidity",
+    "Pressure",
+    "WindSpeed",
+    "WindGustSpeed",
+    "Cloud"
+  ],
+  "scaler_mean": {
+    "MinTemp": 14.988404768282884,
+    "MaxTemp": 30.023621305473707,
+    "Rainfall": 25.069874542369856,
+    "Humidity": 60.032959639253505,
+    "Pressure": 1007.6033159210644,
+    "WindSpeed": 29.930069649075808,
+    "WindGustSpeed": 40.0177768104295,
+    "Cloud": 3.9876328243593178
+  },
+  "scaler_scale": {
+    "MinTemp": 8.651711131107666,
+    "MaxTemp": 8.65623289841502,
+    "Rainfall": 14.451502311279862,
+    "Humidity": 23.12864696882064,
+    "Pressure": 15.887740526200819,
+    "WindSpeed": 17.283571612313754,
+    "WindGustSpeed": 23.114535003321652,
+    "Cloud": 2.580376590205132
+  },
+  "scaler_n_samples_seen": 44796,
+  "split": {
+    "test_size": 0.2,
+    "random_state": 42,
+    "stratify": true,
+    "train_rows": 44796,
+    "test_rows": 11200
+  },
+  "verified": {
+    "test_accuracy": 1.0,
+    "roc_auc": 1.0,
+    "confusion_matrix": [
+      [
+        9116,
+        0
+      ],
+      [
+        0,
+        2084
+      ]
+    ],
+    "first_test_prediction": 0,
+    "first_test_actual": 0
+  },
+  "model_file": "random_forest_rain_model.pkl"
+}

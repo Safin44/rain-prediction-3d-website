@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+joblib
+numpy
+pandas
+# The .pkl was saved with scikit-learn 1.9.1 — load it with the same version.
+scikit-learn==1.9.1
+pydantic
